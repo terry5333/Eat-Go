@@ -2,18 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ✅ 不依賴 Tailwind，保證永遠可見（避免白底白字/白底淺字） */
-html, body {
+/* 保證不可能白畫面 */
+html,
+body {
   height: 100%;
 }
 
 body {
-  background: #09090b; /* zinc-950 */
-  color: #fafafa;      /* near white */
+  background-color: #09090b; /* zinc-950 */
+  color: #fafafa;
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-}
-
-* {
-  -webkit-tap-highlight-color: transparent;
 }
