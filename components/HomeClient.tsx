@@ -25,6 +25,18 @@ const PRICE_TAGS: readonly PriceTag[] = ["便宜", "中等", "高級"] as const;
 const FAV_KEY = "eatgo:favs:v1";
 type Fav = Record<string, Restaurant>;
 
+async function safeReadJson(res: Response) {
+  const text = await res.text(); // ✅ 先讀 text，避免空 body 直接爆
+  if (!text.trim()) {
+    throw new Error(`API 回傳空內容（HTTP ${res.status}）`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`API 回傳非 JSON（HTTP ${res.status}）：${text.slice(0, 200)}`);
+  }
+}
+
 export default function HomeClient() {
   const [mode, setMode] = useState<"coords" | "text">("coords");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -80,9 +92,7 @@ export default function HomeClient() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      },
+      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => setError("定位失敗：你可能拒絕了定位權限。"),
       { enableHighAccuracy: true, timeout: 12000 }
     );
@@ -97,8 +107,12 @@ export default function HomeClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "查詢失敗");
+
+      const data = await safeReadJson(res);
+      if (!res.ok) {
+        throw new Error(data?.error ?? `查詢失敗（HTTP ${res.status}）`);
+      }
+
       setResults(data.results ?? []);
       setLastPayload(payload);
     } catch (e: any) {
@@ -157,7 +171,7 @@ export default function HomeClient() {
         <div className="rounded-3xl bg-white/5 p-6 shadow-soft ring-1 ring-white/10">
           <div className="flex flex-col gap-5">
             <div className="text-xs text-zinc-400">
-              ✅ Client component mounted（看到這行代表 JS 有跑）
+              ✅ Client component mounted
             </div>
 
             <div>
@@ -305,9 +319,7 @@ export default function HomeClient() {
           </div>
 
           {favList.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-400">
-              看到喜歡的店按「收藏」就會出現在這裡。
-            </p>
+            <p className="mt-4 text-sm text-zinc-400">看到喜歡的店按「收藏」就會出現在這裡。</p>
           ) : (
             <div className="mt-4 space-y-3">
               {favList.slice(0, 8).map((r) => (
@@ -343,6 +355,7 @@ export default function HomeClient() {
 
       <section className="mt-8">
         <h2 className="text-xl font-semibold">結果</h2>
+
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence>
             {results.map((r) => (
