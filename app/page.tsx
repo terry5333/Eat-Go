@@ -6,6 +6,7 @@ import type { FoodCategory, PriceTag, Restaurant, SearchRequest } from "@/lib/ty
 import { Chips } from "@/components/Chips";
 import { Toggle } from "@/components/Toggle";
 import { RestaurantCard } from "@/components/RestaurantCard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const CATEGORIES: readonly FoodCategory[] = [
   "不限",
@@ -20,32 +21,25 @@ const CATEGORIES: readonly FoodCategory[] = [
   "飲料"
 ] as const;
 
-// 免費版資料沒有 price_level / rating（這些 UI 會停用顯示）
 const PRICE_TAGS: readonly PriceTag[] = ["便宜", "中等", "高級"] as const;
 
 const FAV_KEY = "eatgo:favs:v1";
 type Fav = Record<string, Restaurant>;
 
-export default function Page() {
-  // location
+function Home() {
   const [mode, setMode] = useState<"coords" | "text">("coords");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationText, setLocationText] = useState("");
 
-  // preferences
   const [category, setCategory] = useState<FoodCategory>("不限");
   const [radiusKm, setRadiusKm] = useState<1 | 3 | 5>(3);
-
-  // 免費版只保留「只看營業中（近似）」：其實是用 opening_hours 有無當作近似
   const [openNow, setOpenNow] = useState(false);
 
-  // results
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<Restaurant[]>([]);
   const [lastPayload, setLastPayload] = useState<SearchRequest | null>(null);
 
-  // favs
   const [favs, setFavs] = useState<Fav>({});
   const favList = useMemo(() => Object.values(favs), [favs]);
 
@@ -53,18 +47,14 @@ export default function Page() {
     try {
       const raw = localStorage.getItem(FAV_KEY);
       if (raw) setFavs(JSON.parse(raw));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
   function persistFavs(next: Fav) {
     setFavs(next);
     try {
       localStorage.setItem(FAV_KEY, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   function toggleFav(placeId: string) {
@@ -94,9 +84,7 @@ export default function Page() {
       (pos) => {
         setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
-      () => {
-        setError("定位失敗：你可能拒絕了定位權限。");
-      },
+      () => setError("定位失敗：你可能拒絕了定位權限。"),
       { enableHighAccuracy: true, timeout: 12000 }
     );
   }
@@ -135,7 +123,6 @@ export default function Page() {
         radiusKm,
         category,
         openNow,
-        // 免費版會忽略這些，但型別需要
         minRating: 0,
         priceTags: []
       };
@@ -167,6 +154,11 @@ export default function Page() {
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-10">
+      {/* ✅ 這行文字「不可能空白」，如果你連這行都看不到，就代表 layout/globals 沒載入或路由不對 */}
+      <div className="mb-4 text-xs text-zinc-400">
+        ✅ EatGo UI loaded（如果你看到這行，代表不是路由問題，是功能或 API 問題）
+      </div>
+
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -179,8 +171,7 @@ export default function Page() {
             不知道吃什麼？你選條件，我給你 5 間。免費資料來源：OpenStreetMap。
           </p>
           <p className="mt-2 text-xs text-zinc-400">
-            提醒：免費資料通常沒有 Google 那種「評分 / 價位 / 即時營業中」。
-            我們用「距離 + 是否有 opening_hours」做 vibe 排序。
+            免費資料沒有 Google 那種評分/價位/即時營業中，我們用距離＋opening_hours 近似排序。
           </p>
         </div>
 
@@ -213,10 +204,8 @@ export default function Page() {
       </header>
 
       <section className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        {/* Left: controls */}
         <div className="rounded-3xl bg-white/5 p-6 shadow-soft ring-1 ring-white/10">
           <div className="flex flex-col gap-5">
-            {/* Location */}
             <div>
               <h2 className="text-lg font-semibold">你現在在哪？</h2>
 
@@ -255,7 +244,6 @@ export default function Page() {
               )}
             </div>
 
-            {/* Category */}
             <div>
               <h2 className="text-lg font-semibold">今天想吃什麼？</h2>
               <div className="mt-3">
@@ -263,7 +251,6 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Radius */}
             <div>
               <h2 className="text-lg font-semibold">距離</h2>
               <div className="mt-3 flex gap-2">
@@ -285,7 +272,6 @@ export default function Page() {
               </div>
             </div>
 
-            {/* Open now (approx) */}
             <div className="flex flex-col gap-2">
               <Toggle checked={openNow} onChange={setOpenNow} label="只看「可能可營業」(有 opening_hours)" />
               <p className="text-xs text-zinc-400">
@@ -293,7 +279,6 @@ export default function Page() {
               </p>
             </div>
 
-            {/* Disabled controls (price/rating) */}
             <div className="rounded-3xl bg-white/3 p-4 ring-1 ring-white/10">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">評分 / 價位</h2>
@@ -302,28 +287,14 @@ export default function Page() {
               <div className="mt-3 opacity-40 pointer-events-none">
                 <div className="mb-3 flex flex-wrap gap-2">
                   {PRICE_TAGS.map((t) => (
-                    <span
-                      key={t}
-                      className="rounded-full bg-white/5 px-4 py-2 text-sm ring-1 ring-white/10"
-                    >
+                    <span key={t} className="rounded-full bg-white/5 px-4 py-2 text-sm ring-1 ring-white/10">
                       {t}
                     </span>
                   ))}
                 </div>
-                <div className="rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-zinc-200">最低評分</span>
-                    <span className="text-sm font-semibold">—</span>
-                  </div>
-                  <input type="range" min={3.5} max={4.7} step={0.1} value={4.0} readOnly className="mt-2 w-full" />
-                </div>
               </div>
-              <p className="mt-3 text-xs text-zinc-400">
-                之後你想升級 Google Places，再把評分/價位開回來就行。
-              </p>
             </div>
 
-            {/* Actions */}
             <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
@@ -352,7 +323,6 @@ export default function Page() {
           </div>
         </div>
 
-        {/* Right: favorites */}
         <div className="rounded-3xl bg-white/5 p-6 shadow-soft ring-1 ring-white/10">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">收藏清單</h2>
@@ -365,61 +335,44 @@ export default function Page() {
             </p>
           ) : (
             <div className="mt-4 space-y-3">
-              {favList
-                .sort((a, b) => b.vibeScore - a.vibeScore)
-                .slice(0, 8)
-                .map((r) => (
-                  <a
-                    key={r.placeId}
-                    href={r.mapsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10 hover:bg-white/10 transition"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold">{r.name}</div>
-                        <div className="mt-1 text-xs text-zinc-300">
-                          {r.distanceKm.toFixed(2)} km
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          toggleFav(r.placeId);
-                        }}
-                        className="rounded-xl bg-amber-300 px-3 py-2 text-xs font-semibold text-zinc-950"
-                      >
-                        移除
-                      </button>
+              {favList.slice(0, 8).map((r) => (
+                <a
+                  key={r.placeId}
+                  href={r.mapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-2xl bg-white/5 px-4 py-3 ring-1 ring-white/10 hover:bg-white/10 transition"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold">{r.name}</div>
+                      <div className="mt-1 text-xs text-zinc-300">{r.distanceKm.toFixed(2)} km</div>
                     </div>
-                  </a>
-                ))}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleFav(r.placeId);
+                      }}
+                      className="rounded-xl bg-amber-300 px-3 py-2 text-xs font-semibold text-zinc-950"
+                    >
+                      移除
+                    </button>
+                  </div>
+                </a>
+              ))}
             </div>
           )}
         </div>
       </section>
 
       <section className="mt-8">
-        <div className="flex items-end justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">結果</h2>
-            <p className="mt-2 text-sm text-zinc-300">
-              免費版排序偏向「近」＋「有 opening_hours」。
-            </p>
-          </div>
-        </div>
+        <h2 className="text-xl font-semibold">結果</h2>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence>
             {results.map((r) => (
-              <RestaurantCard
-                key={r.placeId}
-                r={r}
-                onToggleFav={toggleFav}
-                isFav={isFav(r.placeId)}
-              />
+              <RestaurantCard key={r.placeId} r={r} onToggleFav={toggleFav} isFav={isFav(r.placeId)} />
             ))}
           </AnimatePresence>
         </div>
@@ -430,13 +383,7 @@ export default function Page() {
             animate={{ opacity: 1 }}
             className="mt-6 rounded-3xl bg-white/5 p-6 text-sm text-zinc-300 ring-1 ring-white/10"
           >
-            目前沒有結果。你可以：
-            <ul className="mt-2 list-disc pl-5 text-zinc-300">
-              <li>距離改成 5 km</li>
-              <li>類型改「不限」</li>
-              <li>關掉「只看可能可營業」</li>
-              <li>手動地點換個寫法（例如：台北 中山 / 台中 北區）</li>
-            </ul>
+            目前沒有結果。你可以把距離改成 5 km、或類型改「不限」、或關掉「只看可能可營業」。
           </motion.div>
         ) : null}
       </section>
@@ -445,5 +392,13 @@ export default function Page() {
         EatGo・free vibe coding edition (OSM)
       </footer>
     </main>
+  );
+}
+
+export default function Page() {
+  return (
+    <ErrorBoundary>
+      <Home />
+    </ErrorBoundary>
   );
 }
